@@ -1,0 +1,20 @@
+[package]
+name = "token_fuzz_rs"
+version = "0.1.0"
+edition = "2024"
+
+[profile.bench]
+debug = true
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[lib]
+name = "token_fuzz_rs"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+pyo3 = "0.27.0"
+rayon = "1.11.0"
+
+[dev-dependencies]
+flamegraph = "0.6.10"
+
