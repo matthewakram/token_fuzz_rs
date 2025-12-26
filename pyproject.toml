@@ -5,12 +5,49 @@ build-backend = "maturin"
 [project]
 name = "token_fuzz_rs"
 requires-python = ">=3.8"
-classifiers = [
-    "Programming Language :: Rust",
-    "Programming Language :: Python :: Implementation :: CPython",
-    "Programming Language :: Python :: Implementation :: PyPy",
-]
 dynamic = ["version"]
+description = "Fast token-based fuzzy string matching for very large, static corpora (Rust-backed, Python-first)."
+readme = "README.md"
+authors = [
+  { name = "Matthew Akram", email = "mazfh85246@gmail.com" },
+]
+license = { file = "LICENSE" }
+
+keywords = [
+  "fuzzy",
+  "string matching",
+  "similarity",
+  "minhash",
+  "tokens",
+  "rust",
+  "pyo3",
+]
+
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.8",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Rust",
+  "Programming Language :: Python :: Implementation :: CPython",
+  "Programming Language :: Python :: Implementation :: PyPy",
+  "Topic :: Software Development :: Libraries",
+  "Topic :: Text Processing",
+]
+
+
+[project.urls]
+Homepage = "https://github.com/matthewakram/token_fuzz_rs"
+Repository = "https://github.com/matthewakram/token_fuzz_rs"
+Issues = "https://github.com/matthewakram/token_fuzz_rs/issues"
+Documentation = "https://github.com/matthewakram/token_fuzz_rs#readme"
 
 [tool.maturin]
 bindings = "pyo3"
