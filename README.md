@@ -1,9 +1,6 @@
 # token-fuzz-rs
 
-> **Disclaimer:** This package is still under heavy development over the next few weeks. Expect breaking changes and incomplete features.
-
-
-Fast token-based fuzzy string matching in Python for **very large, static corpora**.
+**The fastest** token-based fuzzy string matching in Python for **very large, static corpora**.
 
 `token-fuzz-rs` is designed for the case where:
 

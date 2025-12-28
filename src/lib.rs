@@ -1,5 +1,10 @@
 use pyo3::prelude::*;
 
+/// Python module `token_fuzz_rs`.
+///
+/// Exposes `TokenFuzzer` — a MinHash-based fuzzy string matcher implemented
+/// in Rust for performance. Construct a `TokenFuzzer` with a list of strings
+/// and use `match_closest` to find the most similar string to a query.
 #[pymodule]
 pub mod token_fuzz_rs {
 
@@ -9,8 +14,16 @@ pub mod token_fuzz_rs {
     use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
     use rayon::slice::ParallelSliceMut;
 
-    const NUM_HASHES: usize = 128;
-
+    /// A MinHash-based fuzzy string matcher exposed to Python.
+    ///
+    /// Create an instance with a corpus of strings, then call
+    /// `match_closest(query)` to retrieve the corpus string that is most
+    /// similar to `query` based on MinHash signature similarity.
+    ///
+    /// Example (Python):
+    ///
+    ///     f = token_fuzz_rs.TokenFuzzer(["hello world", "other text"])
+    ///     best = f.match_closest("hello wurld")
     #[pyclass]
     pub struct TokenFuzzer {
         strings: Vec<String>,
@@ -21,9 +34,23 @@ pub mod token_fuzz_rs {
 
     #[pymethods]
     impl TokenFuzzer {
+        /// Create a new `TokenFuzzer` instance.
+        ///
+        /// Args:
+        ///     strings (List[str]): The list of strings to index for fuzzy matching.
+        ///     num_hashes (int, optional): Number of MinHash functions to use when
+        ///         building signatures. Defaults to 128. Larger values increase
+        ///         signature resolution at the cost of more memory and CPU.
+        ///
+        /// Returns:
+        ///     TokenFuzzer: An object that can be used from Python to find closest matches.
+        ///
+        /// Notes:
+        ///     The fuzzer computes MinHash signatures of length `num_hashes` for
+        ///     each input string using a deterministic set of seeds.
         #[new]
-        pub fn new(strings: Vec<String>) -> Self {
-            let num_hashes = NUM_HASHES;
+        #[pyo3(signature = (strings, num_hashes=128))]
+        pub fn new(strings: Vec<String>, num_hashes: usize) -> Self {
             let hash_seeds = generate_seeds(num_hashes, 0x1234_5678_9abc_def0u64);
             let tokencache = build_cache(&strings, num_hashes, &hash_seeds);
 
@@ -35,7 +62,22 @@ pub mod token_fuzz_rs {
             }
         }
 
-        /// Find the closest-matching string to `s` based on MinHash signature similarity.
+        /// Find the closest-matching string to `s` using MinHash similarity.
+        ///
+        /// Args:
+        ///     s (str): The query string to match against the indexed corpus.
+        ///
+        /// Returns:
+        ///     str: The corpus string with the highest MinHash similarity to `s`.
+        ///
+        /// Raises:
+        ///     ValueError: If the `TokenFuzzer` was created with an empty corpus.
+        ///
+        /// Behaviour:
+        ///     Similarity is measured as the fraction of matching MinHash
+        ///     signature components (a float in 0.0..1.0 under the hood). If
+        ///     multiple corpus entries tie for best score, the first matching
+        ///     entry encountered is returned.
         pub fn match_closest(&self, s: String) -> PyResult<String> {
             if self.strings.is_empty() {
                 return Err(PyValueError::new_err(
@@ -151,7 +193,7 @@ mod tests {
             "fuzzy token matcher".to_string(),
         ];
 
-        let fuzzer = token_fuzz_rs::TokenFuzzer::new(data);
+        let fuzzer = token_fuzz_rs::TokenFuzzer::new(data, 128);
 
         // One query string
         let query = "hello wurld".to_string();
@@ -169,7 +211,7 @@ mod tests {
             "fuzzy token matcher".to_string(),
         ];
 
-        let fuzzer = token_fuzz_rs::TokenFuzzer::new(data);
+        let fuzzer = token_fuzz_rs::TokenFuzzer::new(data, 128);
 
         // One query string
         let query = "hello wurld I love you".to_string();
