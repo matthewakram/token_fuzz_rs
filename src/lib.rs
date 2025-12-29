@@ -141,24 +141,18 @@ pub mod token_fuzz_rs {
         ///     f = token_fuzz_rs.TokenFuzzer(["hello world", "other text"], 128)
         ///     results = f.match_closest_batch(["hello wurld", "other txt"])
         ///     # results -> ["hello world", "other text"]
-        pub fn match_closest_batch(
-            &self,
-            py: Python<'_>,
-            queries: Vec<String>,
-        ) -> PyResult<Vec<String>> {
+        pub fn match_closest_batch(&self, queries: Vec<String>) -> PyResult<Vec<String>> {
             if self.strings.is_empty() {
                 return Err(PyValueError::new_err(
                     "TokenFuzzer contains no strings to match against",
                 ));
             }
 
-            let results: PyResult<Vec<String>> = py.detach(move || {
-                queries
-                    .par_iter()
-                    .map(|q| self.internal_match_closest(q)) // Result<String, String>
-                    .map(|r: Result<String, String>| r.map_err(PyValueError::new_err)) // Result<String, PyErr>
-                    .collect()
-            });
+            let results: PyResult<Vec<String>> = queries
+                .par_iter()
+                .map(|q| self.internal_match_closest(q)) // Result<String, String>
+                .map(|r: Result<String, String>| r.map_err(PyValueError::new_err)) // Result<String, PyErr>
+                .collect();
 
             return results;
         }
@@ -291,10 +285,7 @@ mod tests {
             "rust progrmming".to_string(),
         ];
 
-        let results = pyo3::Python::attach(|py| {
-            // `match_closest_batch` consumes the queries vector
-            fuzzer.match_closest_batch(py, queries.clone()).unwrap()
-        });
+        let results = fuzzer.match_closest_batch(queries.clone()).unwrap();
 
         assert_eq!(
             results,
@@ -305,5 +296,4 @@ mod tests {
             ]
         );
     }
-    
 }
