@@ -32,6 +32,39 @@ pub mod token_fuzz_rs {
         hash_seeds: Vec<u64>,
     }
 
+    impl TokenFuzzer {
+        pub fn internal_match_closest(&self, s: &String) -> Result<String, String> {
+            if self.strings.is_empty() {
+                return Err("TokenFuzzer contains no strings to match against".to_string());
+            }
+
+            let mut query_sig = vec![u64::MAX; self.num_hashes];
+            compute_signature(&s, &self.hash_seeds, &mut query_sig);
+
+            let mut best_idx = 0usize;
+            let mut best_score = -1.0_f64;
+
+            for (i, _) in self.strings.iter().enumerate() {
+                let offset = i * self.num_hashes;
+                let mut equal = 0usize;
+
+                for j in 0..self.num_hashes {
+                    if self.tokencache[offset + j] == query_sig[j] {
+                        equal += 1;
+                    }
+                }
+
+                let score = equal as f64 / self.num_hashes as f64;
+                if score > best_score {
+                    best_score = score;
+                    best_idx = i;
+                }
+            }
+
+            Ok(self.strings[best_idx].clone())
+        }
+    }
+
     #[pymethods]
     impl TokenFuzzer {
         /// Create a new `TokenFuzzer` instance.
@@ -79,36 +112,55 @@ pub mod token_fuzz_rs {
         ///     multiple corpus entries tie for best score, the first matching
         ///     entry encountered is returned.
         pub fn match_closest(&self, s: String) -> PyResult<String> {
+            let closest = self.internal_match_closest(&s);
+            match closest {
+                Ok(closest_string) => Ok(closest_string),
+                Err(error_msg) => Err(PyValueError::new_err(error_msg)),
+            }
+        }
+
+        /// Find the closest-matching strings for a batch of query strings in parallel.
+        ///
+        /// Args:
+        ///     queries (List[str]): A list of query strings to match against the indexed corpus.
+        ///
+        /// Returns:
+        ///     List[str]: For each query, the corpus string with the highest MinHash similarity.
+        ///
+        /// Raises:
+        ///     ValueError: If the `TokenFuzzer` was created with an empty corpus.
+        ///
+        /// Behaviour:
+        ///     Each query is processed independently and in parallel using Rayon. For every
+        ///     query, the MinHash signature is computed and compared against all cached
+        ///     corpus signatures. The best-matching corpus string is returned for each
+        ///     query, preserving the input order.
+        ///
+        /// Example (Python):
+        ///
+        ///     f = token_fuzz_rs.TokenFuzzer(["hello world", "other text"], 128)
+        ///     results = f.match_closest_batch(["hello wurld", "other txt"])
+        ///     # results -> ["hello world", "other text"]
+        pub fn match_closest_batch(
+            &self,
+            py: Python<'_>,
+            queries: Vec<String>,
+        ) -> PyResult<Vec<String>> {
             if self.strings.is_empty() {
                 return Err(PyValueError::new_err(
                     "TokenFuzzer contains no strings to match against",
                 ));
             }
 
-            let mut query_sig = vec![u64::MAX; self.num_hashes];
-            compute_signature(&s, &self.hash_seeds, &mut query_sig);
+            let results: PyResult<Vec<String>> = py.detach(move || {
+                queries
+                    .par_iter()
+                    .map(|q| self.internal_match_closest(q)) // Result<String, String>
+                    .map(|r: Result<String, String>| r.map_err(PyValueError::new_err)) // Result<String, PyErr>
+                    .collect()
+            });
 
-            let mut best_idx = 0usize;
-            let mut best_score = -1.0_f64;
-
-            for (i, _) in self.strings.iter().enumerate() {
-                let offset = i * self.num_hashes;
-                let mut equal = 0usize;
-
-                for j in 0..self.num_hashes {
-                    if self.tokencache[offset + j] == query_sig[j] {
-                        equal += 1;
-                    }
-                }
-
-                let score = equal as f64 / self.num_hashes as f64;
-                if score > best_score {
-                    best_score = score;
-                    best_idx = i;
-                }
-            }
-
-            Ok(self.strings[best_idx].clone())
+            return results;
         }
     }
 
@@ -219,4 +271,39 @@ mod tests {
 
         assert_eq!(best, "hello world");
     }
+
+    #[test]
+    fn match_closest_batch_returns_expected_results() {
+        pyo3::Python::initialize();
+
+        // Build a small corpus and queries that clearly map to corpus entries
+        let data = vec![
+            "hello world".to_string(),
+            "other text".to_string(),
+            "rust programming".to_string(),
+        ];
+
+        let fuzzer = token_fuzz_rs::TokenFuzzer::new(data, 128);
+
+        let queries = vec![
+            "hello wurld".to_string(),
+            "other txt".to_string(),
+            "rust progrmming".to_string(),
+        ];
+
+        let results = pyo3::Python::attach(|py| {
+            // `match_closest_batch` consumes the queries vector
+            fuzzer.match_closest_batch(py, queries.clone()).unwrap()
+        });
+
+        assert_eq!(
+            results,
+            vec![
+                "hello world".to_string(),
+                "other text".to_string(),
+                "rust programming".to_string(),
+            ]
+        );
+    }
+    
 }

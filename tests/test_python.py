@@ -162,3 +162,74 @@ def test_different_queries_choose_different_targets():
     assert fuzzer.match_closest("hello wurld") == "hello world"
     assert fuzzer.match_closest("I like rust") == "rust programming language"
     assert fuzzer.match_closest("token fuzzing") == "fuzzy token matcher"
+
+def test_match_closest_batch_returns_expected_results():
+    # Given a small corpus
+    corpus = ["hello world", "other text", "rust programming"]
+    fuzzer = TokenFuzzer(corpus, 128)
+
+    # And some noisy queries
+    queries = ["hello wurld", "other txt", "rust progrmming"]
+
+    # When matching in batch
+    results = fuzzer.match_closest_batch(queries)
+
+    # Then results correspond to the expected closest matches
+    assert results == ["hello world", "other text", "rust programming"]
+
+
+def test_match_closest_batch_consistent_with_single_match():
+    corpus = [
+        "hello world",
+        "other text",
+        "rust programming",
+        "fuzzy token matcher",
+    ]
+    fuzzer = TokenFuzzer(corpus, 128)
+
+    queries = [
+        "hello wurld",
+        "other txt",
+        "rust progrmming",
+        "fuzzy tokne matchr",
+    ]
+
+    # Batch results
+    batch_results = fuzzer.match_closest_batch(queries)
+
+    # Single-call results
+    single_results = [fuzzer.match_closest(q) for q in queries]
+
+    # The batch implementation should be consistent with the single-query method
+    assert batch_results == single_results
+
+
+def test_match_closest_batch_preserves_order():
+    corpus = ["aaa", "bbb", "ccc"]
+    fuzzer = TokenFuzzer(corpus, 64)
+
+    # Queries in a specific order
+    queries = ["ccc", "aaa", "bbb", "ccc", "aaa"]
+    results = fuzzer.match_closest_batch(queries)
+
+    # The output order must match the input query order
+    assert results == ["ccc", "aaa", "bbb", "ccc", "aaa"]
+
+
+def test_match_closest_batch_empty_queries_returns_empty_list():
+    corpus = ["hello world", "other text"]
+    fuzzer = TokenFuzzer(corpus, 128)
+
+    results = fuzzer.match_closest_batch([])
+
+    assert results == []
+
+
+def test_match_closest_batch_empty_corpus_raises_value_error():
+    # Construct a fuzzer with an empty corpus
+    fuzzer = TokenFuzzer([], 128)
+
+    with pytest.raises(ValueError) as excinfo:
+        fuzzer.match_closest_batch(["some query"])
+
+    assert "contains no strings to match against" in str(excinfo.value)

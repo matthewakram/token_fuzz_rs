@@ -1,5 +1,5 @@
 use std::{fs, path::Path, time};
-use token_fuzz_rs::token_fuzz_rs::{TokenFuzzer};
+use token_fuzz_rs::token_fuzz_rs::TokenFuzzer;
 
 #[test]
 fn token_fuzzer_matches_koeln_address() {
