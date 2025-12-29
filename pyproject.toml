@@ -37,7 +37,6 @@ classifiers = [
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Rust",
   "Programming Language :: Python :: Implementation :: CPython",
-  "Programming Language :: Python :: Implementation :: Rust",
   "Programming Language :: Python :: Implementation :: PyPy",
   "Topic :: Software Development :: Libraries",
   "Topic :: Text Processing",
