@@ -25,7 +25,7 @@ fn token_fuzzer_matches_koeln_address() {
 
     let start = time::Instant::now();
 
-    let fuzzer = TokenFuzzer::new(addresses, 128);
+    let fuzzer = TokenFuzzer::new(addresses, 128, "naive".to_string());
 
     println!("initiated fuzzer {}", start.elapsed().as_secs_f64());
 
