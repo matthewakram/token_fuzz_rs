@@ -18,6 +18,7 @@ pub mod token_fuzz_rs {
     use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
     use crate::internal_token_fuzzer::InternalTokenFuzzer;
+    use crate::token_fuzzers::indexed::IndexedTokenFuzzer;
     use crate::token_fuzzers::naive::NaiveTokenFuzzer;
 
     /// A MinHash-based fuzzy string matcher exposed to Python.
@@ -59,9 +60,9 @@ pub mod token_fuzz_rs {
         #[new]
         #[pyo3(signature = (strings, num_hashes=128, method="naive".to_string()))]
         pub fn new(strings: Vec<String>, num_hashes: usize, method: String) -> Self {
-            let itf = match method.as_str() {
-                "naive" => Box::new(NaiveTokenFuzzer::new(strings, num_hashes))
-                    as Box<dyn InternalTokenFuzzer>,
+            let itf: Box<dyn InternalTokenFuzzer>= match method.as_str() {
+                "naive" => Box::new(NaiveTokenFuzzer::new(strings, num_hashes)),
+                "indexed" => Box::new(IndexedTokenFuzzer::new(strings, num_hashes)),
                 _ => panic!("unknown method: {method}"),
             };
 
