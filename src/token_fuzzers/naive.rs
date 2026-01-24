@@ -9,18 +9,33 @@ pub struct NaiveTokenFuzzer {
     tokencache: Vec<u64>,
     num_hashes: usize,
     hash_seeds: Vec<u64>,
+    min_token_length: usize,
+    max_token_length: usize,
 }
 
 impl NaiveTokenFuzzer {
-    pub fn new(strings: Vec<String>, num_hashes: usize) -> Self {
+    pub fn new(
+        strings: Vec<String>,
+        num_hashes: usize,
+        min_token_length: usize,
+        max_token_length: usize,
+    ) -> Self {
         let hash_seeds = generate_seeds(num_hashes, 0x1234_5678_9abc_def0u64);
-        let tokencache = build_cache(&strings, num_hashes, &hash_seeds);
+        let tokencache = build_cache(
+            &strings,
+            num_hashes,
+            &hash_seeds,
+            min_token_length,
+            max_token_length,
+        );
 
         NaiveTokenFuzzer {
             strings,
             tokencache,
             num_hashes,
             hash_seeds,
+            min_token_length,
+            max_token_length,
         }
     }
 }
@@ -32,10 +47,16 @@ impl InternalTokenFuzzer for NaiveTokenFuzzer {
         }
 
         let mut query_sig = vec![u64::MAX; self.num_hashes];
-        compute_signature(&s, &self.hash_seeds, &mut query_sig);
+        compute_signature(
+            &s,
+            &self.hash_seeds,
+            &mut query_sig,
+            self.min_token_length,
+            self.max_token_length,
+        );
 
         let mut best_idx = 0usize;
-        let mut best_score = -1.0_f64;
+        let mut best_score = 0;
 
         for (i, _) in self.strings.iter().enumerate() {
             let offset = i * self.num_hashes;
@@ -47,7 +68,7 @@ impl InternalTokenFuzzer for NaiveTokenFuzzer {
                 }
             }
 
-            let score = equal as f64 / self.num_hashes as f64;
+            let score = equal;
             if score > best_score {
                 best_score = score;
                 best_idx = i;
@@ -59,13 +80,21 @@ impl InternalTokenFuzzer for NaiveTokenFuzzer {
 }
 
 /// Build the token cache (flattened signatures) for all strings.
-fn build_cache(strings: &[String], num_hashes: usize, seeds: &[u64]) -> Vec<u64> {
+fn build_cache(
+    strings: &[String],
+    num_hashes: usize,
+    seeds: &[u64],
+    min_token_length: usize,
+    max_token_length: usize,
+) -> Vec<u64> {
     let mut cache = vec![u64::MAX; strings.len() * num_hashes];
 
     cache
         .par_chunks_mut(num_hashes)
         .zip(strings.par_iter())
-        .for_each(|(chunck, s)| compute_signature(s, seeds, chunck));
+        .for_each(|(chunck, s)| {
+            compute_signature(s, seeds, chunck, min_token_length, max_token_length)
+        });
 
     cache
 }

@@ -2,9 +2,8 @@ use crate::hashing_funcs::{compute_signature, generate_seeds};
 use crate::internal_token_fuzzer::InternalTokenFuzzer;
 use rayon::prelude::*;
 use std::cmp::Ordering;
-use std::usize;
-
-const NUM_CACHE_ENTRIES: usize = 1024;
+use std::collections::HashMap;
+use std::{u64, usize};
 
 #[derive(Debug, Clone, Copy)]
 struct IndexEntry {
@@ -13,7 +12,7 @@ struct IndexEntry {
 }
 
 #[derive(Debug)]
-pub struct IndexedTokenFuzzer {
+pub struct HashedTokenFuzzer {
     strings: Vec<String>,
     num_hashes: usize,
     hash_seeds: Vec<u64>,
@@ -22,14 +21,14 @@ pub struct IndexedTokenFuzzer {
     // sorted by (hash_val, string_id)
     reverse_index: Vec<Vec<IndexEntry>>,
 
-    // reverse_index_cache[h] is an array of NUM_CACHE_ENTRIES equidistant
-    // hash_val samples from reverse_index[h], for fast narrowing.
-    reverse_index_cache: Vec<[u64; NUM_CACHE_ENTRIES]>,
+    // reverse_index_map: Vec<HashMap<u64, usize, IdentityBuildHasher>>,
+    reverse_index_map: Vec<HashMap<u64, usize>>,
+
     min_token_length: usize,
     max_token_length: usize,
 }
 
-impl IndexedTokenFuzzer {
+impl HashedTokenFuzzer {
     pub fn new(
         strings: Vec<String>,
         num_hashes: usize,
@@ -70,42 +69,32 @@ impl IndexedTokenFuzzer {
             });
         });
 
-        // Build the reverse_index_cache: equidistant samples from each list
-        let mut reverse_index_cache = Vec::with_capacity(num_hashes);
-        let len = strings.len();
+        let mut reverse_index_map: Vec<HashMap<u64, usize>> = Vec::new();
 
         for entries in &reverse_index {
-            let mut row = [0u64; NUM_CACHE_ENTRIES];
-
-            if len > 0 {
-                // Take NUM_CACHE_ENTRIES equidistant indices into entries
-                for i in 0..NUM_CACHE_ENTRIES {
-                    // Integer division gives us roughly equidistant samples.
-                    let idx = cache_idx_to_sector_start(i, len);
-                    // Clamp to last index to avoid len == NUM_CACHE_ENTRIES edge issues
-                    row[i] = entries[idx].hash_val;
+            let mut hash_value_map: HashMap<u64, usize> = HashMap::with_hasher(Default::default());
+            for i in 0..entries.len() {
+                let entry = &entries[i];
+                if !hash_value_map.contains_key(&entry.hash_val) {
+                    hash_value_map.insert(entry.hash_val, i);
                 }
-            } else {
-                // If there are no entries (e.g. no strings), leave row as zeros.
-                // Caller can special-case the empty-string set.
             }
-
-            reverse_index_cache.push(row);
+            reverse_index_map.push(hash_value_map);
         }
 
-        IndexedTokenFuzzer {
+        HashedTokenFuzzer {
             strings,
             num_hashes,
             hash_seeds,
             reverse_index,
-            reverse_index_cache,
-            max_token_length,
+            reverse_index_map,
             min_token_length,
+            max_token_length,
         }
     }
 }
 
-impl InternalTokenFuzzer for IndexedTokenFuzzer {
+impl InternalTokenFuzzer for HashedTokenFuzzer {
     fn match_closest(&self, s: &String) -> Result<String, String> {
         if self.strings.is_empty() {
             return Err("TokenFuzzer contains no strings to match against".to_string());
@@ -126,45 +115,15 @@ impl InternalTokenFuzzer for IndexedTokenFuzzer {
 
         for (h, &hash_val) in query_sig.iter().enumerate() {
             let entries = &self.reverse_index[h];
-            let cache_row = &self.reverse_index_cache[h];
+            let cache_row = &self.reverse_index_map[h];
 
             let len = entries.len();
             assert!(len == self.strings.len());
 
-            // --- 2a. Find the sector in the cache row ---
-            //
-            // Cache row is built from sorted entries, so it is non-decreasing.
-            // We find the first cache entry >= hash_val.
-            let mut sector = 0usize;
-
-            for i in 0..NUM_CACHE_ENTRIES {
-                if cache_row[i] >= hash_val {
-                    break;
-                }
-                sector = i;
-            }
-
-            // --- 2b. Map sector to a range in `entries` ---
-            //
-            // In `new`, cache_row[i] corresponds roughly to entries[(i * len) / NUM_CACHE_ENTRIES].
-            // We use the same mapping to define sector bounds.
-            let sector_start = cache_idx_to_sector_start(sector, len);
-
-            // --- 2c. Scan the sector for the first matching hash_val ---
-            let mut found_idx = usize::MAX;
-
-            for idx in sector_start..len {
-                let entry = &entries[idx];
-
-                if entry.hash_val >= hash_val {
-                    found_idx = idx;
-                    break;
-                }
-            }
+            let found_idx = *cache_row.get(&hash_val).unwrap_or(&len);
 
             first_match_indices.push(found_idx);
         }
-
         let num_strings = self.strings.len();
 
         let mut current_score = 1;
@@ -221,11 +180,6 @@ impl InternalTokenFuzzer for IndexedTokenFuzzer {
     }
 }
 
-#[inline]
-fn cache_idx_to_sector_start(i: usize, len: usize) -> usize {
-    (i * len) / NUM_CACHE_ENTRIES
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -241,13 +195,13 @@ mod tests {
         ];
         let num_hashes = 3;
 
-        let fuzzer = IndexedTokenFuzzer::new(strings.clone(), num_hashes, 0, 20);
+        let fuzzer = HashedTokenFuzzer::new(strings.clone(), num_hashes, 1, 10);
 
         // Basic structural sanity checks
         assert_eq!(fuzzer.strings, strings);
         assert_eq!(fuzzer.num_hashes, num_hashes);
         assert_eq!(fuzzer.reverse_index.len(), num_hashes);
-        assert_eq!(fuzzer.reverse_index_cache.len(), num_hashes);
+        assert_eq!(fuzzer.reverse_index_map.len(), num_hashes);
 
         // For each hash function, we should have one entry per string
         for (h, entries) in fuzzer.reverse_index.iter().enumerate() {
@@ -282,14 +236,10 @@ mod tests {
         }
 
         // Print cache contents
-        println!(
-            "==== reverse_index_cache (NUM_CACHE_ENTRIES = {}) ====",
-            NUM_CACHE_ENTRIES
-        );
-        for (h, row) in fuzzer.reverse_index_cache.iter().enumerate() {
+        for (h, row) in fuzzer.reverse_index_map.iter().enumerate() {
             println!("cache row for hash {}:", h);
-            for (i, val) in row.iter().enumerate() {
-                println!("  cache[{}][{}] = {}", h, i, val);
+            for val in row {
+                println!("  cache[{}][({})] = {}", h, val.0, val.1);
             }
         }
     }
@@ -305,57 +255,12 @@ mod tests {
             "zeta".to_string(),
         ];
         let num_hashes = 4;
-        let fuzzer = IndexedTokenFuzzer::new(strings, num_hashes, 0, 8);
+        let fuzzer = HashedTokenFuzzer::new(strings, num_hashes, 1, 10);
         let mut zeta_sig = vec![u64::MAX; num_hashes];
-        let fake_test_string = "delts".to_string();
-        compute_signature(&fake_test_string, &fuzzer.hash_seeds, &mut zeta_sig, 0, 8);
+        let fake_test_string = "gamma".to_string();
+        compute_signature(&fake_test_string, &fuzzer.hash_seeds, &mut zeta_sig, 1, 10);
         println!("{:?}", zeta_sig);
 
-        // For each hash function, verify that cache entries correspond to
-        // equidistant samples from the sorted reverse_index list.
-        for (h, entries) in fuzzer.reverse_index.iter().enumerate() {
-            let cache_row = &fuzzer.reverse_index_cache[h];
-            let len = entries.len();
-
-            println!(
-                "Checking sampling for hash {}: entries.len() = {}, cache.len() = {}",
-                h, len, NUM_CACHE_ENTRIES
-            );
-
-            if len == 0 {
-                // When there are no entries, we only check that the row is all zeros.
-                for (i, &val) in cache_row.iter().enumerate() {
-                    println!("  (empty) cache[{}][{}] = {}", h, i, val);
-                    assert_eq!(
-                        val, 0,
-                        "Expected zero cache for empty reverse_index at h={}",
-                        h
-                    );
-                }
-                continue;
-            }
-
-            // For non-empty entries, the i-th cache value should be
-            // entries[idx].hash_val, with idx = (i * len) / NUM_CACHE_ENTRIES, clamped.
-            for (i, &cached_hash) in cache_row.iter().enumerate() {
-                let mut idx = (i * len) / NUM_CACHE_ENTRIES;
-                if idx >= len {
-                    idx = len - 1;
-                }
-                let expected_hash = entries[idx].hash_val;
-
-                println!(
-                    "  h = {}, i = {} -> idx = {}, cached = {}, expected = {}",
-                    h, i, idx, cached_hash, expected_hash
-                );
-
-                assert_eq!(
-                    cached_hash, expected_hash,
-                    "Cache value mismatch at h={}, i={}, idx={}",
-                    h, i, idx
-                );
-            }
-        }
         let res = fuzzer.match_closest(&fake_test_string);
 
         println!("{}", res.unwrap());

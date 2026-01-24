@@ -18,6 +18,7 @@ pub mod token_fuzz_rs {
     use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
     use crate::internal_token_fuzzer::InternalTokenFuzzer;
+    use crate::token_fuzzers::hashed::HashedTokenFuzzer;
     use crate::token_fuzzers::indexed::IndexedTokenFuzzer;
     use crate::token_fuzzers::naive::NaiveTokenFuzzer;
 
@@ -45,24 +46,55 @@ pub mod token_fuzz_rs {
         ///     strings (List[str]): The list of strings to index for fuzzy matching.
         ///     num_hashes (int, optional): Number of MinHash functions to use when
         ///         building signatures. Defaults to 128. Larger values increase
-        ///         signature resolution at the cost of more memory and CPU.
+        ///         signature resolution at the cost of more memory and CPU, but increase accuracy.
         ///     method (str, optional): Which internal implementation to use. Supported
         ///         values:
-        ///             - "naive": the simple in-memory implementation (default).
+        ///             - "naive": the simple in-memory implementation (default). (direct scan, ok lookup times, regardless of token length)
+        ///             - "indexed": an indexed implementation using cached samples (fast lookups for long tokens, lower mem usage than hashed).
+        ///             - "hashed": a hashed reverse-index implementation. (fastest lookups for long tokens, high mem usage)
         ///         Unknown values will cause a panic.
+        ///     min_token_length (int, optional): Minimum token length to include when
+        ///         generating tokens for signature computation (exclusive). Defaults to 0.
+        ///     max_token_length (int, optional): Maximum token length to include when
+        ///         generating tokens for signature computation (inclusive). Defaults to 8.
         ///
         /// Returns:
         ///     TokenFuzzer: An object that can be used from Python to find closest matches.
         ///
         /// Notes:
         ///     The fuzzer computes MinHash signatures of length `num_hashes` for
-        ///     each input string using a deterministic set of seeds.
+        ///     each input string using a deterministic set of seeds. The
+        ///     `min_token_length` and `max_token_length` parameters control the
+        ///     tokenization window used by `compute_signature` and therefore the
+        ///     granularity of tokens considered when building signatures.
         #[new]
-        #[pyo3(signature = (strings, num_hashes=128, method="naive".to_string()))]
-        pub fn new(strings: Vec<String>, num_hashes: usize, method: String) -> Self {
-            let itf: Box<dyn InternalTokenFuzzer>= match method.as_str() {
-                "naive" => Box::new(NaiveTokenFuzzer::new(strings, num_hashes)),
-                "indexed" => Box::new(IndexedTokenFuzzer::new(strings, num_hashes)),
+        #[pyo3(signature = (strings, num_hashes=128, method="naive".to_string(),min_token_length=0,max_token_length=8))]
+        pub fn new(
+            strings: Vec<String>,
+            num_hashes: usize,
+            method: String,
+            min_token_length: usize,
+            max_token_length: usize,
+        ) -> Self {
+            let itf: Box<dyn InternalTokenFuzzer> = match method.as_str() {
+                "naive" => Box::new(NaiveTokenFuzzer::new(
+                    strings,
+                    num_hashes,
+                    min_token_length,
+                    max_token_length,
+                )),
+                "indexed" => Box::new(IndexedTokenFuzzer::new(
+                    strings,
+                    num_hashes,
+                    min_token_length,
+                    max_token_length,
+                )),
+                "hashed" => Box::new(HashedTokenFuzzer::new(
+                    strings,
+                    num_hashes,
+                    min_token_length,
+                    max_token_length,
+                )),
                 _ => panic!("unknown method: {method}"),
             };
 
@@ -144,7 +176,7 @@ mod tests {
             "fuzzy token matcher".to_string(),
         ];
 
-        let fuzzer = token_fuzz_rs::TokenFuzzer::new(data, 128, "naive".to_string());
+        let fuzzer = token_fuzz_rs::TokenFuzzer::new(data, 128, "naive".to_string(), 0, 8);
 
         // One query string
         let query = "hello wurld".to_string();
@@ -162,7 +194,7 @@ mod tests {
             "fuzzy token matcher".to_string(),
         ];
 
-        let fuzzer = token_fuzz_rs::TokenFuzzer::new(data, 128, "naive".to_string());
+        let fuzzer = token_fuzz_rs::TokenFuzzer::new(data, 128, "naive".to_string(), 0, 8);
 
         // One query string
         let query = "hello wurld I love you".to_string();
@@ -182,7 +214,7 @@ mod tests {
             "rust programming".to_string(),
         ];
 
-        let fuzzer = token_fuzz_rs::TokenFuzzer::new(data, 128, "naive".to_string());
+        let fuzzer = token_fuzz_rs::TokenFuzzer::new(data, 128, "naive".to_string(), 0, 8);
 
         let queries = vec![
             "hello wurld".to_string(),

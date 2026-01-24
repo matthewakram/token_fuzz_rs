@@ -4,7 +4,6 @@ use token_fuzz_rs::token_fuzz_rs::TokenFuzzer;
 #[test]
 fn token_fuzzer_matches_koeln_address() {
     // Adjust this path depending on where you place the CSV file.
-    // Common pattern: put it in `tests/addresses.csv`.
     let path = Path::new("test_data/addresses.csv");
 
     let contents = fs::read_to_string(path).expect("failed to read tests/addresses.csv");
@@ -25,19 +24,30 @@ fn token_fuzzer_matches_koeln_address() {
 
     let start = time::Instant::now();
 
-    let fuzzer = TokenFuzzer::new(addresses, 128, "indexed".to_string());
+    let fuzzer = TokenFuzzer::new(addresses, 128, "naive".to_string(), 15, 30);
 
+    let query_list: Vec<String> = std::iter::repeat("Aachener Straße 1, 50674 Köln".to_string())
+        .take(300)
+        .collect();
     println!("initiated fuzzer {}", start.elapsed().as_secs_f64());
 
     // A fake address in Köln (Koeln). Adjust if you want a specific street/postcode.
     let start = time::Instant::now();
-    let query = "Aachener Straße 1, 50674 Köln".to_string();
+
+    let best_matches = fuzzer
+    .match_closest_batch(query_list)
+    .expect("should not fail");
+    let best_match = best_matches[0].clone();
+
+    // let best_match = fuzzer
+    //     .match_closest("Aachener Straße 1, 50674 Köln".to_string())
+    //     .unwrap();
 
     println!("queried {}", start.elapsed().as_secs_f64());
 
-    let best_match = fuzzer
-        .match_closest(query)
-        .expect("match_closest should not fail");
+    // let best_match = fuzzer
+    //     .match_closest(query)
+    //     .expect("match_closest should not fail");
 
     // Since we don't know the exact contents of addresses.csv here,
     // we only assert that some non-empty address is returned.

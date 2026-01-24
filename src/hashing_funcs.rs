@@ -26,19 +26,28 @@ fn hash_token(token: u64, seed: u64) -> u64 {
 }
 
 /// Compute the MinHash signature for a single string.
-pub fn compute_signature(s: &str, seeds: &[u64], sig_buffer: &mut [u64]) {
+pub fn compute_signature(
+    s: &str,
+    seeds: &[u64],
+    sig_buffer: &mut [u64],
+    min_token_length: usize,
+    max_token_length: usize,
+) {
     debug_assert_eq!(seeds.len(), sig_buffer.len());
     let bytes = s.as_bytes();
 
     for i in 0..bytes.len() {
-        let max_len = 8.min(bytes.len() - i);
+        let max_len = max_token_length.min(bytes.len() - i);
         let mut token: u64 = 0;
 
         // Build tokens incrementally for lengths 1..=max_len
         for l in 0..max_len {
             let b = unsafe { *bytes.get_unchecked(i + l) };
             // Pack bytes into a u64, little-endian in the low bytes
-            token |= (b as u64) << (8 * l);
+            token ^= (b as u64).rotate_left(8 * l as u32);
+            if l < min_token_length {
+                continue;
+            };
 
             for (h_idx, seed) in seeds.iter().enumerate() {
                 let h = hash_token(token, *seed);
