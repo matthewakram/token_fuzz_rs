@@ -1741,7 +1741,7 @@ dependencies = [
 
 [[package]]
 name = "token_fuzz_rs"
-version = "0.2.0-a2"
+version = "0.2.0"
 dependencies = [
  "flamegraph",
  "pyo3",
