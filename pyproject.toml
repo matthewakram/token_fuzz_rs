@@ -6,7 +6,7 @@ build-backend = "maturin"
 name = "token_fuzz_rs"
 requires-python = ">=3.8"
 dynamic = ["version"]
-description = "Fast token-based fuzzy string matching for very large, static corpora (Rust-backed, Python-first)."
+description = "The fastest token-based fuzzy string matching for very large, static corpora (Rust-backed, Python-first)."
 readme = "README.md"
 authors = [
   { name = "Matthew Akram", email = "mazfh85246@gmail.com" },
