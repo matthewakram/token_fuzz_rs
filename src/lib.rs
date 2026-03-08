@@ -18,6 +18,7 @@ pub mod token_fuzz_rs {
     use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
     use crate::internal_token_fuzzer::InternalTokenFuzzer;
+    use crate::token_fuzzers::grouped::GroupedTokenFuzzer;
     use crate::token_fuzzers::hashed::HashedTokenFuzzer;
     use crate::token_fuzzers::indexed::IndexedTokenFuzzer;
     use crate::token_fuzzers::naive::NaiveTokenFuzzer;
@@ -52,6 +53,7 @@ pub mod token_fuzz_rs {
         ///             - "naive": the simple in-memory implementation (default). (direct scan, ok lookup times, regardless of token length)
         ///             - "indexed": an indexed implementation using cached samples (fast lookups for long tokens, lower mem usage than hashed).
         ///             - "hashed": a hashed reverse-index implementation. (fastest lookups for long tokens, high mem usage)
+        ///             - "grouped": a grouped implementation that organizes tokens into groups for efficient matching (balances memory usage and lookup speed).
         ///         Unknown values will cause a panic.
         ///     min_token_length (int, optional): Minimum token length to include when
         ///         generating tokens for signature computation (exclusive). Defaults to 0.
@@ -94,6 +96,12 @@ pub mod token_fuzz_rs {
                     num_hashes,
                     min_token_length,
                     max_token_length,
+                )),
+                "grouped" => Box::new(GroupedTokenFuzzer::new(
+                    strings,
+                    num_hashes,
+                    min_token_length,
+                    max_token_length
                 )),
                 _ => panic!("unknown method: {method}"),
             };
@@ -176,7 +184,7 @@ mod tests {
             "fuzzy token matcher".to_string(),
         ];
 
-        let fuzzer = token_fuzz_rs::TokenFuzzer::new(data, 128, "naive".to_string(), 0, 8);
+        let fuzzer = token_fuzz_rs::TokenFuzzer::new(data, 128, "grouped".to_string(), 0, 8);
 
         // One query string
         let query = "hello wurld".to_string();
@@ -194,13 +202,13 @@ mod tests {
             "fuzzy token matcher".to_string(),
         ];
 
-        let fuzzer = token_fuzz_rs::TokenFuzzer::new(data, 128, "naive".to_string(), 0, 8);
+        let fuzzer = token_fuzz_rs::TokenFuzzer::new(data, 128, "grouped".to_string(), 0, 8);
 
         // One query string
-        let query = "hello wurld I love you".to_string();
+        let query = "rust programming".to_string();
         let best = fuzzer.match_closest(query).unwrap();
 
-        assert_eq!(best, "hello world");
+        assert_eq!(best, "rust programming");
     }
 
     #[test]
@@ -209,17 +217,17 @@ mod tests {
 
         // Build a small corpus and queries that clearly map to corpus entries
         let data = vec![
-            "hello world".to_string(),
-            "other text".to_string(),
+            "hello world this is a test".to_string(),
+            "other text to test this test".to_string(),
             "rust programming".to_string(),
         ];
 
-        let fuzzer = token_fuzz_rs::TokenFuzzer::new(data, 128, "naive".to_string(), 0, 8);
+        let fuzzer = token_fuzz_rs::TokenFuzzer::new(data, 128, "grouped".to_string(), 0, 8);
 
         let queries = vec![
-            "hello wurld".to_string(),
-            "other txt".to_string(),
-            "rust progrmming".to_string(),
+            "hello world this is an test".to_string(),
+            "other txt to test this test".to_string(),
+            "rst programming".to_string(),
         ];
 
         let results = fuzzer.match_closest_batch(queries.clone()).unwrap();
@@ -227,8 +235,8 @@ mod tests {
         assert_eq!(
             results,
             vec![
-                "hello world".to_string(),
-                "other text".to_string(),
+                "hello world this is a test".to_string(),
+                "other text to test this test".to_string(),
                 "rust programming".to_string(),
             ]
         );

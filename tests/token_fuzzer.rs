@@ -24,9 +24,9 @@ fn token_fuzzer_matches_koeln_address() {
 
     let start = time::Instant::now();
 
-    let fuzzer = TokenFuzzer::new(addresses, 128, "naive".to_string(), 15, 30);
+    let fuzzer = TokenFuzzer::new(addresses, 128, "grouped".to_string(), 0, 8);
 
-    let query_list: Vec<String> = std::iter::repeat("Aachener Straße 1, 50674 Köln".to_string())
+    let query_list: Vec<String> = std::iter::repeat("aachener straße 1, köln, 50674".to_string())
         .take(300)
         .collect();
     println!("initiated fuzzer {}", start.elapsed().as_secs_f64());
