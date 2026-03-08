@@ -34,6 +34,33 @@ pub mod token_fuzz_rs {
     ///     f = token_fuzz_rs.TokenFuzzer(["hello world", "other text"])
     ///     best = f.match_closest("hello wurld")
     /// ```
+    ///
+    /// Args:
+    ///     strings (List[str]): The list of strings to index for fuzzy matching.
+    ///     num_hashes (int, optional): Number of MinHash functions to use when
+    ///         building signatures. Defaults to 128. Larger values increase
+    ///         signature resolution at the cost of more memory and CPU, but increase accuracy.
+    ///     method (str, optional): Which internal implementation to use. Supported
+    ///         values:
+    ///             - "naive": the simple in-memory implementation (default). (direct scan, ok lookup times, regardless of token length)
+    ///             - "indexed": an indexed implementation using cached samples (fast lookups for long tokens, lower mem usage than hashed).
+    ///             - "hashed": a hashed reverse-index implementation. (fastest lookups for long tokens, high mem usage)
+    ///             - "grouped": a grouped implementation that organizes tokens into groups for efficient matching (balances memory usage and lookup speed).
+    ///         Unknown values will cause a panic.
+    ///     min_token_length (int, optional): Minimum token length to include when
+    ///         generating tokens for signature computation (exclusive). Defaults to 0.
+    ///     max_token_length (int, optional): Maximum token length to include when
+    ///         generating tokens for signature computation (inclusive). Defaults to 8.
+    ///
+    /// Returns:
+    ///     TokenFuzzer: An object that can be used from Python to find closest matches.
+    ///
+    /// Notes:
+    ///     The fuzzer computes MinHash signatures of length `num_hashes` for
+    ///     each input string using a deterministic set of seeds. The
+    ///     `min_token_length` and `max_token_length` parameters control the
+    ///     tokenization window used by `compute_signature` and therefore the
+    ///     granularity of tokens considered when building signatures.
     #[pyclass]
     pub struct TokenFuzzer {
         internal_token_fuzzer: Box<dyn InternalTokenFuzzer>,
@@ -41,34 +68,7 @@ pub mod token_fuzz_rs {
 
     #[pymethods]
     impl TokenFuzzer {
-        /// Create a new `TokenFuzzer` instance.
-        ///
-        /// Args:
-        ///     strings (List[str]): The list of strings to index for fuzzy matching.
-        ///     num_hashes (int, optional): Number of MinHash functions to use when
-        ///         building signatures. Defaults to 128. Larger values increase
-        ///         signature resolution at the cost of more memory and CPU, but increase accuracy.
-        ///     method (str, optional): Which internal implementation to use. Supported
-        ///         values:
-        ///             - "naive": the simple in-memory implementation (default). (direct scan, ok lookup times, regardless of token length)
-        ///             - "indexed": an indexed implementation using cached samples (fast lookups for long tokens, lower mem usage than hashed).
-        ///             - "hashed": a hashed reverse-index implementation. (fastest lookups for long tokens, high mem usage)
-        ///             - "grouped": a grouped implementation that organizes tokens into groups for efficient matching (balances memory usage and lookup speed).
-        ///         Unknown values will cause a panic.
-        ///     min_token_length (int, optional): Minimum token length to include when
-        ///         generating tokens for signature computation (exclusive). Defaults to 0.
-        ///     max_token_length (int, optional): Maximum token length to include when
-        ///         generating tokens for signature computation (inclusive). Defaults to 8.
-        ///
-        /// Returns:
-        ///     TokenFuzzer: An object that can be used from Python to find closest matches.
-        ///
-        /// Notes:
-        ///     The fuzzer computes MinHash signatures of length `num_hashes` for
-        ///     each input string using a deterministic set of seeds. The
-        ///     `min_token_length` and `max_token_length` parameters control the
-        ///     tokenization window used by `compute_signature` and therefore the
-        ///     granularity of tokens considered when building signatures.
+
         #[new]
         #[pyo3(signature = (strings, num_hashes=128, method="naive".to_string(),min_token_length=0,max_token_length=8))]
         pub fn new(
