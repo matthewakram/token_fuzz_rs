@@ -14,7 +14,7 @@ Rust core, Python-first API, distributed on PyPI.
 Use this when you have a **large, mostly static list of strings** and need to run **many token-based queries** quickly.  
 For smaller/one-off matching, use [RapidFuzz](https://github.com/maxbachmann/RapidFuzz).
 
-**Token-based fuzzy matching** treats strings as collections of tokens (e.g., byte n‑grams or words), rather than as raw character sequences. In effect, it favors **shared fragments and word-level overlap**, making it more tolerant of reordered words, missing words, or small local edits. Traditional edit-distance-style fuzzing focuses on the exact character sequence, so it tends to penalize word reordering and long insertions more harshly.
+**Token-based fuzzy matching** treats strings as collections of tokens (e.g., byte n‑grams), rather than as raw character sequences. In effect, it favors **shared fragments and word-level overlap**, making it more tolerant of reordered words, missing words, or small local edits. Traditional edit-distance-style fuzzing focuses on the exact character sequence, so it tends to penalize word reordering and long insertions more harshly.
 
 ---
 
@@ -141,15 +141,15 @@ All methods share the same API; they differ in how they prune candidates.
 Tokens are byte n-grams.  
 These two parameters heavily affect behavior:
 
-- `min_token_length`: ignores short tokens (less noise).
-- `max_token_length`: caps token size (more context per token).
+- `min_token_length`: ignores short tokens (less noise) (exclusive).
+- `max_token_length`: caps token size (more context per token) (inclusive).
 
-**Small window (0–8):**
+**Small window (4–8):**
 - Many tokens per string.
 - High overlap across corpus.
 - **naive** often best.
 
-**Large window (10–30):**
+**Large window (15–30):**
 - Fewer, more selective tokens.
 - Pruning becomes effective.
 - **indexed/hashed** often best.
@@ -185,6 +185,35 @@ match_closest_batch(self, queries: list[str]) -> list[str]
 ```
 
 Batch version (parallelized internally).
+
+---
+
+## Benchmark
+
+We compare token-fuzz-rs to the most popular fuzzy search library, RapidFuzz, and another popular library (difflib).
+The query script can be found under /bench/bench.py. 
+We present here the time it takes to make 100 queries over corpora of varying sizes.
+To be very conservative, we set the similarity cuttoff at 90% so RapidFuzz can significantly prune its candidate pool, and also only use the levenshtein distance algorithm, which is significantly faster than their implementation of token-based fuzzy search.
+In summary, token-fuzz-rs shows a performance increase of roughly 4 orders of magnitude over RapidFuzz.
+The hashed algorithm has great performance but runs out of memory on the largest benchmark, causing significantly slower swap lookups.
+
+```bash
+Benchmark Results:
+
+       N  token_naive  token_indexed  token_hashed  token_grouped  rapidfuzz   difflib
+     200     0.002772       0.001654      0.001675       0.001373   0.002673  2.604417
+    1000     0.002342       0.002267      0.002272       0.002030   0.012994 12.107110
+    5000     0.003304       0.001493      0.001420       0.001499   0.076178       NaN
+   10000     0.005966       0.001686      0.002015       0.001620   0.140908       NaN
+   50000     0.052331       0.002283      0.002131       0.001591   0.756459       NaN
+  100000     0.121471       0.002476      0.001733       0.001744   1.466600       NaN
+  500000     0.677942       0.002526      0.002356       0.001565   6.710559       NaN
+ 1000000     1.553939       0.003203      0.002182       0.001832  14.486500       NaN
+ 5000000     8.621556       0.010324      0.002516       0.003704  68.900339       NaN
+10000000    16.574239       0.019260      0.367714       0.005032 144.028963       NaN
+```
+
+![](bench/fuzzy_benchmark.png)
 
 ---
 
