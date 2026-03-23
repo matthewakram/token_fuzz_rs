@@ -18,6 +18,7 @@ pub mod token_fuzz_rs {
     use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
     use crate::internal_token_fuzzer::InternalTokenFuzzer;
+    use crate::token_fuzzers::binary::BinaryTokenFuzzer;
     use crate::token_fuzzers::grouped::GroupedTokenFuzzer;
     use crate::token_fuzzers::hashed::HashedTokenFuzzer;
     use crate::token_fuzzers::indexed::IndexedTokenFuzzer;
@@ -43,9 +44,10 @@ pub mod token_fuzz_rs {
     ///     method (str, optional): Which internal implementation to use. Supported
     ///         values:
     ///             - "naive": the simple in-memory implementation (default). (direct scan, ok lookup times, regardless of token length)
-    ///             - "indexed": an indexed implementation using cached samples (fast lookups for long tokens, lower mem usage than hashed).
+    ///             - "binary": an implementation with a reverse index that uses binary search for finding candidates (fast lookups for long tokens, lower mem usage than hashed)
     ///             - "hashed": a hashed reverse-index implementation. (fastest lookups for long tokens, high mem usage)
-    ///             - "grouped": a grouped implementation that organizes tokens into groups for efficient matching (balances memory usage and lookup speed).
+    ///             - "grouped": a grouped implementation that organizes tokens into groups for efficient matching (fast lookups for long tokens, requires very high expected match).
+    ///             - "indexed": DEPRECATED Use "binary" instead. An indexed implementation using cached samples (fast lookups for long tokens, lower mem usage than hashed). 
     ///         Unknown values will cause a panic.
     ///     min_token_length (int, optional): Minimum token length to include when
     ///         generating tokens for signature computation (exclusive). Defaults to 0.
@@ -84,6 +86,12 @@ pub mod token_fuzz_rs {
                     num_hashes,
                     min_token_length,
                     max_token_length,
+                )),
+                "binary" => Box::new(BinaryTokenFuzzer::new(
+                    strings,
+                    num_hashes,
+                    min_token_length,
+                    max_token_length
                 )),
                 "indexed" => Box::new(IndexedTokenFuzzer::new(
                     strings,

@@ -128,6 +128,7 @@ for N in Ns:
     # TokenFuzzer methods
     for method, min_token_length, max_token_length in [
         ("naive", 3, 10),
+        ("binary", 15, 25),
         ("indexed", 15, 25),
         ("hashed", 15, 25),
         ("grouped", 0, 8)

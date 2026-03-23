@@ -1,7 +1,7 @@
 import pytest
 from token_fuzz_rs import TokenFuzzer
 
-@pytest.mark.parametrize("method", ["naive", "indexed", "hashed", "grouped"])
+@pytest.mark.parametrize("method", ["naive", "binary", "indexed", "hashed", "grouped"])
 def test_token_fuzzer_finds_closest_match(method: str):
     # Three strings in the data set
     data = [
@@ -19,7 +19,7 @@ def test_token_fuzzer_finds_closest_match(method: str):
     assert best == "hello world"
 
 
-@pytest.mark.parametrize("method", ["naive", "indexed", "hashed", "grouped"])
+@pytest.mark.parametrize("method", ["naive", "binary", "indexed", "hashed", "grouped"])
 def test_token_fuzzer_finds_closest_match_off(method: str):
     data = [
         "hello world",
@@ -34,7 +34,7 @@ def test_token_fuzzer_finds_closest_match_off(method: str):
     assert best == "hello world"
 
 
-@pytest.mark.parametrize("method", ["naive", "indexed", "hashed", "grouped"])
+@pytest.mark.parametrize("method", ["naive", "binary", "indexed", "hashed", "grouped"])
 def test_empty_corpus_raises_value_error(method: str):
     fuzzer = TokenFuzzer([], method=method)
 
@@ -44,7 +44,7 @@ def test_empty_corpus_raises_value_error(method: str):
     assert "contains no strings" in str(excinfo.value)
 
 
-@pytest.mark.parametrize("method", ["naive", "indexed", "hashed", "grouped"])
+@pytest.mark.parametrize("method", ["naive", "binary", "indexed", "hashed", "grouped"])
 def test_single_element_corpus_always_returns_that_element(method: str):
     data = ["only option"]
     fuzzer = TokenFuzzer(data, method=method)
@@ -53,7 +53,7 @@ def test_single_element_corpus_always_returns_that_element(method: str):
         assert fuzzer.match_closest(query) == "only option"
 
 
-@pytest.mark.parametrize("method", ["naive", "indexed", "hashed", "grouped"])
+@pytest.mark.parametrize("method", ["naive", "binary", "indexed", "hashed", "grouped"])
 def test_exact_match_beats_similar_matches(method: str):
     data = [
         "hello world",
@@ -67,7 +67,7 @@ def test_exact_match_beats_similar_matches(method: str):
     assert best == "hello world"
 
 
-@pytest.mark.parametrize("method", ["naive", "indexed", "hashed", "grouped"])
+@pytest.mark.parametrize("method", ["naive", "binary", "indexed", "hashed", "grouped"])
 def test_tie_breaker_returns_first_in_corpus(method: str):
     # Construct corpus with duplicated string so they should tie perfectly.
     data = [
@@ -85,7 +85,7 @@ def test_tie_breaker_returns_first_in_corpus(method: str):
         assert fuzzer.match_closest("duplicate") == "duplicate"
 
 
-@pytest.mark.parametrize("method", ["naive", "indexed", "hashed", "grouped"])
+@pytest.mark.parametrize("method", ["naive", "binary", "indexed", "hashed", "grouped"])
 def test_default_num_hashes_is_used(method: str):
     data = ["hello world", "rust programming"]
     fuzzer = TokenFuzzer(data, method=method)  # rely on default num_hashes
@@ -93,7 +93,7 @@ def test_default_num_hashes_is_used(method: str):
     assert best == "hello world"
 
 
-@pytest.mark.parametrize("method", ["naive", "indexed", "hashed", "grouped"])
+@pytest.mark.parametrize("method", ["naive", "binary", "indexed", "hashed", "grouped"])
 def test_small_num_hashes_still_works(method: str):
     data = ["hello world", "rust programming"]
     # Very small signature; may be noisy but should not crash and should usually pick the right one
@@ -102,7 +102,7 @@ def test_small_num_hashes_still_works(method: str):
     assert best == "hello world"
 
 
-@pytest.mark.parametrize("method", ["naive", "indexed", "hashed", "grouped"])
+@pytest.mark.parametrize("method", ["naive", "binary", "indexed", "hashed", "grouped"])
 def test_larger_num_hashes_is_deterministic(method: str):
     data = [
         "hello world",
@@ -119,7 +119,7 @@ def test_larger_num_hashes_is_deterministic(method: str):
     assert results.pop() == "hello world"
 
 
-@pytest.mark.parametrize("method", ["naive", "indexed", "hashed", "grouped"])
+@pytest.mark.parametrize("method", ["naive", "binary", "indexed", "hashed", "grouped"])
 def test_unicode_and_non_ascii_strings(method: str):
     data = [
         "naïve café",
@@ -134,7 +134,7 @@ def test_unicode_and_non_ascii_strings(method: str):
     assert fuzzer.match_closest("Привет мир") == "Привет, мир"
 
 
-@pytest.mark.parametrize("method", ["naive", "indexed", "hashed", "grouped"])
+@pytest.mark.parametrize("method", ["naive", "binary", "indexed", "hashed", "grouped"])
 def test_long_strings(method: str):
     base = "lorem ipsum dolor sit amet " * 50
     variant1 = base.replace("ipsum", "ixpsum", 1)
@@ -149,7 +149,7 @@ def test_long_strings(method: str):
     assert best == base
 
 
-@pytest.mark.parametrize("method", ["naive", "indexed", "hashed", "grouped"])
+@pytest.mark.parametrize("method", ["naive", "binary", "indexed", "hashed", "grouped"])
 def test_repeated_calls_do_not_mutate_state(method: str):
     data = [
         "hello world",
@@ -162,7 +162,7 @@ def test_repeated_calls_do_not_mutate_state(method: str):
     assert all(result == "hello world" for result in results)
 
 
-@pytest.mark.parametrize("method", ["naive", "indexed", "hashed", "grouped"])
+@pytest.mark.parametrize("method", ["naive", "binary", "indexed", "hashed", "grouped"])
 def test_different_queries_choose_different_targets(method: str):
     data = [
         "hello world",
@@ -176,7 +176,7 @@ def test_different_queries_choose_different_targets(method: str):
     assert fuzzer.match_closest("fuzzy token fuzzing") == "fuzzy token matcher"
 
 
-@pytest.mark.parametrize("method", ["naive", "indexed", "hashed", "grouped"])
+@pytest.mark.parametrize("method", ["naive", "binary", "indexed", "hashed", "grouped"])
 def test_match_closest_batch_returns_expected_results(method: str):
     # Given a small corpus
     corpus = ["hello world", "other text", "rust programming"]
@@ -191,7 +191,7 @@ def test_match_closest_batch_returns_expected_results(method: str):
     assert results == ["hello world", "other text", "rust programming"]
 
 
-@pytest.mark.parametrize("method", ["naive", "indexed", "hashed", "grouped"])
+@pytest.mark.parametrize("method", ["naive", "binary", "indexed", "hashed", "grouped"])
 def test_match_closest_batch_consistent_with_single_match(method: str):
     corpus = [
         "hello world",
@@ -218,7 +218,7 @@ def test_match_closest_batch_consistent_with_single_match(method: str):
     assert batch_results == single_results
 
 
-@pytest.mark.parametrize("method", ["naive", "indexed", "hashed", "grouped"])
+@pytest.mark.parametrize("method", ["naive", "binary", "indexed", "hashed", "grouped"])
 def test_match_closest_batch_preserves_order(method: str):
     corpus = ["aaa", "bbb", "ccc"]
     fuzzer = TokenFuzzer(corpus, 64, method=method)
@@ -231,7 +231,7 @@ def test_match_closest_batch_preserves_order(method: str):
     assert results == ["ccc", "aaa", "bbb", "ccc", "aaa"]
 
 
-@pytest.mark.parametrize("method", ["naive", "indexed", "hashed", "grouped"])
+@pytest.mark.parametrize("method", ["naive", "binary", "indexed", "hashed", "grouped"])
 def test_match_closest_batch_empty_queries_returns_empty_list(method: str):
     corpus = ["hello world", "other text"]
     fuzzer = TokenFuzzer(corpus, 128, method=method)
@@ -241,7 +241,7 @@ def test_match_closest_batch_empty_queries_returns_empty_list(method: str):
     assert results == []
 
 
-@pytest.mark.parametrize("method", ["naive", "indexed", "hashed", "grouped"])
+@pytest.mark.parametrize("method", ["naive", "binary", "indexed", "hashed", "grouped"])
 def test_match_closest_batch_empty_corpus_raises_value_error(method: str):
     # Construct a fuzzer with an empty corpus
     fuzzer = TokenFuzzer([], 128, method=method)

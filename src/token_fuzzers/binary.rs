@@ -2,8 +2,6 @@ use crate::hashing_funcs::{compute_signature, generate_seeds};
 use crate::internal_token_fuzzer::InternalTokenFuzzer;
 use rayon::prelude::*;
 use std::cmp::Ordering;
-use std::collections::HashMap;
-use std::{u64, usize};
 
 #[derive(Debug, Clone, Copy)]
 struct IndexEntry {
@@ -12,7 +10,7 @@ struct IndexEntry {
 }
 
 #[derive(Debug)]
-pub struct HashedTokenFuzzer {
+pub struct BinaryTokenFuzzer {
     strings: Vec<String>,
     num_hashes: usize,
     hash_seeds: Vec<u64>,
@@ -21,14 +19,15 @@ pub struct HashedTokenFuzzer {
     // sorted by (hash_val, string_id)
     reverse_index: Vec<Vec<IndexEntry>>,
 
-    // reverse_index_map: Vec<HashMap<u64, usize, IdentityBuildHasher>>,
-    reverse_index_map: Vec<HashMap<u64, usize>>,
-
     min_token_length: usize,
     max_token_length: usize,
 }
 
-impl HashedTokenFuzzer {
+impl BinaryTokenFuzzer {
+    fn find_first_hash(entries: &[IndexEntry], hash_val: u64) -> usize {
+        entries.partition_point(|e| e.hash_val < hash_val)
+    }
+
     pub fn new(
         strings: Vec<String>,
         num_hashes: usize,
@@ -60,6 +59,7 @@ impl HashedTokenFuzzer {
                 });
             }
         }
+
         drop(signatures);
 
         // Sort each reverse_index[h] by (hash_val, string_id)
@@ -70,34 +70,18 @@ impl HashedTokenFuzzer {
             });
         });
 
-        let reverse_index_map: Vec<HashMap<u64, usize>> = reverse_index
-        .par_iter()
-        .map(|entries| {
-            let mut hash_value_map: HashMap<u64, usize> =
-                HashMap::with_capacity_and_hasher(strings.len(), Default::default());
-
-            for (i, entry) in entries.iter().enumerate() {
-                hash_value_map.entry(entry.hash_val).or_insert(i);
-            }
-
-            hash_value_map
-        })
-        .collect();
-
-
-        HashedTokenFuzzer {
+        BinaryTokenFuzzer {
             strings,
             num_hashes,
             hash_seeds,
             reverse_index,
-            reverse_index_map,
             min_token_length,
             max_token_length,
         }
     }
 }
 
-impl InternalTokenFuzzer for HashedTokenFuzzer {
+impl InternalTokenFuzzer for BinaryTokenFuzzer {
     fn match_closest(&self, s: &String) -> Result<String, String> {
         if self.strings.is_empty() {
             return Err("TokenFuzzer contains no strings to match against".to_string());
@@ -113,28 +97,28 @@ impl InternalTokenFuzzer for HashedTokenFuzzer {
             self.max_token_length,
         );
 
-        // 2. For each hash function, find first matching index in reverse_index[h]
+        // 2. For each hash function, binary search for first possible matching index
         let mut first_match_indices = Vec::with_capacity(self.num_hashes);
 
         for (h, &hash_val) in query_sig.iter().enumerate() {
             let entries = &self.reverse_index[h];
-            let cache_row = &self.reverse_index_map[h];
-
             let len = entries.len();
             assert!(len == self.strings.len());
 
-            let found_idx = *cache_row.get(&hash_val).unwrap_or(&len);
-
+            let found_idx = Self::find_first_hash(entries, hash_val);
             first_match_indices.push(found_idx);
         }
+
         let num_strings = self.strings.len();
 
         let mut current_score = 1;
         let mut best_score = 0;
         let mut best_index = 0;
+
         while current_score != 0 {
             current_score = 0;
             let mut min_string_idx = usize::MAX;
+
             for (h, &pointer) in first_match_indices.iter().enumerate() {
                 if pointer >= num_strings {
                     continue;
@@ -179,7 +163,7 @@ impl InternalTokenFuzzer for HashedTokenFuzzer {
             }
         }
 
-        return Ok(self.strings[best_index].clone());
+        Ok(self.strings[best_index].clone())
     }
 }
 
@@ -188,7 +172,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn builds_reverse_index_and_cache_basic() {
+    fn builds_reverse_index_basic() {
         let strings = vec![
             "apple".to_string(),
             "banana".to_string(),
@@ -198,13 +182,12 @@ mod tests {
         ];
         let num_hashes = 3;
 
-        let fuzzer = HashedTokenFuzzer::new(strings.clone(), num_hashes, 1, 10);
+        let fuzzer = BinaryTokenFuzzer::new(strings.clone(), num_hashes, 1, 10);
 
         // Basic structural sanity checks
         assert_eq!(fuzzer.strings, strings);
         assert_eq!(fuzzer.num_hashes, num_hashes);
         assert_eq!(fuzzer.reverse_index.len(), num_hashes);
-        assert_eq!(fuzzer.reverse_index_map.len(), num_hashes);
 
         // For each hash function, we should have one entry per string
         for (h, entries) in fuzzer.reverse_index.iter().enumerate() {
@@ -237,18 +220,10 @@ mod tests {
                 );
             }
         }
-
-        // Print cache contents
-        for (h, row) in fuzzer.reverse_index_map.iter().enumerate() {
-            println!("cache row for hash {}:", h);
-            for val in row {
-                println!("  cache[{}][({})] = {}", h, val.0, val.1);
-            }
-        }
     }
 
     #[test]
-    fn reverse_index_cache_sampling_matches_reverse_index() {
+    fn binary_search_sampling_matches_reverse_index() {
         let strings = vec![
             "alpha".to_string(),
             "beta".to_string(),
@@ -258,14 +233,29 @@ mod tests {
             "zeta".to_string(),
         ];
         let num_hashes = 4;
-        let fuzzer = HashedTokenFuzzer::new(strings, num_hashes, 1, 10);
-        let mut zeta_sig = vec![u64::MAX; num_hashes];
+        let fuzzer = BinaryTokenFuzzer::new(strings, num_hashes, 1, 10);
+
         let fake_test_string = "gamma".to_string();
-        compute_signature(&fake_test_string, &fuzzer.hash_seeds, &mut zeta_sig, 1, 10);
-        println!("{:?}", zeta_sig);
+        let mut sig = vec![u64::MAX; num_hashes];
+        compute_signature(&fake_test_string, &fuzzer.hash_seeds, &mut sig, 1, 10);
+
+        println!("{:?}", sig);
+
+        for (h, &hash_val) in sig.iter().enumerate() {
+            let entries = &fuzzer.reverse_index[h];
+            let idx = BinaryTokenFuzzer::find_first_hash(entries, hash_val);
+
+            if idx < entries.len() {
+                assert!(entries[idx].hash_val >= hash_val);
+                if entries[idx].hash_val == hash_val && idx > 0 {
+                    assert!(entries[idx - 1].hash_val < hash_val);
+                }
+            }
+        }
 
         let res = fuzzer.match_closest(&fake_test_string);
+        println!("{}", res.as_ref().unwrap());
 
-        println!("{}", res.unwrap());
+        assert_eq!(res.unwrap(), "gamma".to_string());
     }
 }
